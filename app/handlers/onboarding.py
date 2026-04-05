@@ -1,8 +1,10 @@
 from aiogram import Router, F
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.states.onboarding import OnboardingStates
+from app.services.user_profile import upsert_user_profile
 from app.keyboards.onboarding import (
     goal_keyboard,
     yes_no_keyboard,
@@ -163,10 +165,17 @@ async def equipment_step(message: Message, state: FSMContext):
 
 
 @router.callback_query(OnboardingStates.confirm, F.data == "confirm_yes")
-async def confirm_yes(callback: CallbackQuery, state: FSMContext):
+async def confirm_yes(callback: CallbackQuery, state: FSMContext, session: AsyncSession):
     data = await state.get_data()
+    u = callback.from_user
+    await upsert_user_profile(
+        session,
+        telegram_id=u.id,
+        username=u.username,
+        first_name=u.first_name,
+        profile_data=data,
+    )
 
-    # Здесь позже можно сохранить данные в БД
     await callback.message.edit_text(
         "Профиль сохранен ✅\n\n"
         f"{format_profile(data)}\n"
