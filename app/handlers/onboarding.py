@@ -82,7 +82,7 @@ async def allergies_yes(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(OnboardingStates.allergies)
+@router.message(OnboardingStates.allergies, F.text, ~F.text.startswith("/"))
 async def allergies_text(message: Message, state: FSMContext):
     text = message.text.strip()
     await state.update_data(allergies=text)
@@ -94,14 +94,14 @@ async def allergies_text(message: Message, state: FSMContext):
     )
 
 
-@router.message(OnboardingStates.restrictions)
+@router.message(OnboardingStates.restrictions, F.text, ~F.text.startswith("/"))
 async def restrictions_step(message: Message, state: FSMContext):
     await state.update_data(restrictions=message.text.strip())
     await state.set_state(OnboardingStates.household_size)
     await message.answer("Сколько человек обычно нужно кормить? Напиши число.")
 
 
-@router.message(OnboardingStates.household_size)
+@router.message(OnboardingStates.household_size, F.text, ~F.text.startswith("/"))
 async def household_step(message: Message, state: FSMContext):
     text = message.text.strip()
 
@@ -152,7 +152,7 @@ async def budget_step(callback: CallbackQuery, state: FSMContext):
     await callback.answer()
 
 
-@router.message(OnboardingStates.equipment)
+@router.message(OnboardingStates.equipment, F.text, ~F.text.startswith("/"))
 async def equipment_step(message: Message, state: FSMContext):
     await state.update_data(equipment=message.text.strip())
     data = await state.get_data()

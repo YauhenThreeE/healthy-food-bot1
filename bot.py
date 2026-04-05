@@ -11,6 +11,7 @@ from dotenv import load_dotenv
 from app.db.session import async_session_maker, init_db
 from app.handlers.catalog import router as catalog_router
 from app.handlers.onboarding import router as onboarding_router
+from app.handlers.orders import router as orders_router
 from app.handlers.reminders import router as reminders_router
 from app.handlers.tips import router as tips_router
 from app.middlewares.db import DbSessionMiddleware
@@ -40,10 +41,12 @@ dp = Dispatcher()
 
 dp.update.middleware(DbSessionMiddleware())
 
+# Команды, которые должны работать поверх FSM, подключаем до онбординга
+dp.include_router(tips_router)
+dp.include_router(orders_router)
 dp.include_router(onboarding_router)
 dp.include_router(catalog_router)
 dp.include_router(reminders_router)
-dp.include_router(tips_router)
 
 
 @dp.message(CommandStart())
@@ -54,7 +57,8 @@ async def start_handler(message: Message):
         "Команды:\n"
         "/onboarding — профиль (цели, аллергии, бюджет…)\n"
         "/menu — меню блюд\n"
-        "/tip — совет по питанию (нужен OPENAI_API_KEY)\n"
+        "/order — оформить заказ для клиента\n"
+        "/tip или /advice — совет по питанию (нужен GROQ_API_KEY или OPENAI_API_KEY)\n"
         "/remind и /reminders — напоминания\n"
         "/timezone — часовой пояс для напоминаний\n"
         "/help — все команды"
@@ -68,7 +72,8 @@ async def help_handler(message: Message):
         "/start — старт\n"
         "/onboarding — настройка профиля (сохраняется в БД)\n"
         "/menu — каталог блюд\n"
-        "/tip [вопрос] — ИИ-совет с учётом профиля\n"
+        "/order — оформить заказ для клиента\n"
+        "/tip или /advice [вопрос] — ИИ-совет с учётом профиля\n"
         "/remind ЧЧ:ММ текст — добавить напоминание\n"
         "/reminders — список и удаление\n"
         "/timezone Europe/Moscow — пояс для напоминаний\n"
