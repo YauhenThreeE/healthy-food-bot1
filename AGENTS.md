@@ -11,7 +11,9 @@ source .venv/bin/activate
 python bot.py
 ```
 
-Requires `BOT_TOKEN` in `.env` (Telegram bot token from @BotFather). Without it, `bot.py` raises `ValueError` at import time. Copy `.env.example` to `.env` and fill in the token.
+Requires `BOT_TOKEN` in `.env` (Telegram bot token from @BotFather — available as a Cursor Cloud secret). Without it, `bot.py` raises `ValueError` at import time. Copy `.env.example` to `.env` and fill in the token.
+
+**Polling conflict**: Telegram allows only one long-polling connection per bot token. If you see `ConflictError: terminated by other getUpdates request`, stop the other running instance first.
 
 ### Key caveats
 
@@ -26,7 +28,9 @@ Requires `BOT_TOKEN` in `.env` (Telegram bot token from @BotFather). Without it,
 
 | Variable | Required | Default |
 |---|---|---|
-| `BOT_TOKEN` | Yes | — |
-| `GROQ_API_KEY` | No | — |
+| `BOT_TOKEN` | Yes (secret) | — |
+| `GROQ_API_KEY` | No | `ollama` |
+| `GROQ_BASE_URL` | No | `http://localhost:11434/v1` |
+| `GROQ_MODEL` | No | `llama3` |
 | `OPENAI_API_KEY` | No | — |
 | `DATABASE_URL` | No | SQLite at `./data/healthy_food.db` |
