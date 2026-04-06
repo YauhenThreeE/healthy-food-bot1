@@ -17,7 +17,7 @@ Requires `BOT_TOKEN` in `.env` (Telegram bot token from @BotFather). Without it,
 
 - **Database**: SQLite by default (`./data/healthy_food.db`), auto-created on first run via `init_db()`. No migrations needed — uses `create_all()`.
 - **Seeding**: 15 dishes are auto-seeded on startup if the `dishes` table is empty.
-- **AI tips** (`/tip` command): Uses Ollama from the owner's server. Configure via the Groq env vars since the code uses `AsyncOpenAI` (OpenAI-compatible client): set `GROQ_API_KEY` to any non-empty string (e.g. `ollama`), `GROQ_BASE_URL` to the Ollama endpoint (e.g. `http://<host>:11434/v1`), and `GROQ_MODEL` to the desired model. Gracefully degrades with a user-friendly message if no keys are set.
+- **AI tips** (`/tip` command): Uses **Ollama** running locally at `http://localhost:11434`. The code uses `AsyncOpenAI` which is compatible with Ollama's `/v1` endpoint. Configured via Groq env vars: `GROQ_API_KEY=ollama`, `GROQ_BASE_URL=http://localhost:11434/v1`, `GROQ_MODEL=llama3`. Ollama must be running on the host for `/tip` to work. Gracefully degrades with a user-friendly message if no keys are set.
 - **No test suite**: The repo has no automated tests. Verify changes by running `python bot.py` with a valid `BOT_TOKEN` and testing commands in Telegram.
 - **Lint**: Run `ruff check .` for linting. There is one pre-existing unused import warning in `app/middlewares/db.py`. Run `pyright .` for type checking (pre-existing type errors exist due to aiogram nullable `from_user` patterns).
 - **No Docker/Makefile/CI**: Single-process app, no build step.
