@@ -15,6 +15,7 @@ from sqlalchemy.orm import selectinload
 from app.db.models import User
 from app.db.session import async_session_maker, init_db
 from app.handlers.catalog import router as catalog_router
+from app.handlers.food_log import router as food_log_router
 from app.handlers.navigation import router as navigation_router
 from app.handlers.onboarding import router as onboarding_router
 from app.handlers.orders import router as orders_router
@@ -25,6 +26,7 @@ from app.keyboards.start import after_start_keyboard
 from app.middlewares.db import DbSessionMiddleware
 from app.services.dishes_seed import seed_dishes_if_empty
 from app.services.reminders_runner import reminder_loop
+from app.services.products_seed import seed_products_if_empty
 from app.services.user_profile import ensure_telegram_user
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -52,6 +54,7 @@ dp.update.middleware(DbSessionMiddleware())
 
 dp.include_router(profile_router)
 dp.include_router(tips_router)
+dp.include_router(food_log_router)
 dp.include_router(orders_router)
 dp.include_router(onboarding_router)
 dp.include_router(catalog_router)
@@ -100,6 +103,13 @@ async def help_handler(message: Message):
         "/order — оформить заказ\n\n"
         "🤖 ИИ-советы\n"
         "/tip [вопрос] — совет по питанию\n\n"
+        "📊 Трекинг питания\n"
+        "/log_food продукт 200 г — добавить еду\n"
+        "/log_meal ... — alias для логирования\n"
+        "/today — дневной итог\n"
+        "/advice — рекомендации по рациону\n"
+        "/parse_meal текст — распознать свободный ввод\n"
+        "/remember key=value — сохранить факт в AI памяти\n\n"
         "⏰ Напоминания\n"
         "/remind ЧЧ:ММ текст — добавить\n"
         "/reminders — список и удаление\n"
@@ -114,6 +124,9 @@ async def main():
         added = await seed_dishes_if_empty(session)
         if added:
             logging.getLogger(__name__).info("Seeded %s dishes", added)
+        products_added = await seed_products_if_empty(session)
+        if products_added:
+            logging.getLogger(__name__).info("Seeded %s products", products_added)
         await session.commit()
 
     asyncio.create_task(reminder_loop(bot))

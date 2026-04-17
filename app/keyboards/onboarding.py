@@ -24,6 +24,37 @@ def yes_no_keyboard(prefix: str) -> InlineKeyboardMarkup:
     )
 
 
+def sex_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Женский", callback_data="sex_female")],
+            [InlineKeyboardButton(text="Мужской", callback_data="sex_male")],
+            [InlineKeyboardButton(text="Предпочитаю не указывать", callback_data="sex_unknown")],
+        ]
+    )
+
+
+def activity_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Низкая активность", callback_data="activity_low")],
+            [InlineKeyboardButton(text="Средняя активность", callback_data="activity_medium")],
+            [InlineKeyboardButton(text="Высокая активность", callback_data="activity_high")],
+        ]
+    )
+
+
+def diet_type_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [InlineKeyboardButton(text="Обычный рацион", callback_data="diet_balanced")],
+            [InlineKeyboardButton(text="Вегетарианский", callback_data="diet_vegetarian")],
+            [InlineKeyboardButton(text="Веганский", callback_data="diet_vegan")],
+            [InlineKeyboardButton(text="Низкоуглеводный", callback_data="diet_lowcarb")],
+        ]
+    )
+
+
 def cooking_time_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[

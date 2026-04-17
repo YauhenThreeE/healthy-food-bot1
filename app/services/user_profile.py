@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User, UserProfile
+from app.services.nutrition_targets import TargetInput, estimate_daily_targets
 
 
 async def upsert_user_profile(
@@ -56,6 +57,40 @@ async def upsert_user_profile(
     p.equipment = profile_data.get("equipment", "") or ""
     p.timezone = prev_tz or "Europe/Moscow"
     p.updated_at = datetime.now(timezone.utc)
+
+    user.goal = str(profile_data.get("goal", "") or "")
+    user.sex = str(profile_data.get("sex", "") or "") or None
+    user.age = int(profile_data.get("age")) if profile_data.get("age") else None
+    user.height_cm = float(profile_data.get("height_cm")) if profile_data.get("height_cm") else None
+    user.weight_kg = float(profile_data.get("weight_kg")) if profile_data.get("weight_kg") else None
+    user.target_weight_kg = (
+        float(profile_data.get("target_weight_kg"))
+        if profile_data.get("target_weight_kg")
+        else user.weight_kg
+    )
+    user.activity_level = str(profile_data.get("activity_level", "") or "") or None
+    user.diet_type = str(profile_data.get("diet_type", "") or "") or None
+    user.allergies_json = {"text": profile_data.get("allergies", "") or ""}
+    user.excluded_products_json = {"text": profile_data.get("excluded_products", "") or ""}
+    user.health_flags_json = {"restrictions": profile_data.get("restrictions", "") or ""}
+
+    targets = estimate_daily_targets(
+        TargetInput(
+            sex=user.sex,
+            age=user.age,
+            height_cm=user.height_cm,
+            weight_kg=user.weight_kg,
+            activity_level=user.activity_level,
+            goal=user.goal,
+        )
+    )
+    user.daily_calories_target = targets["daily_calories_target"]
+    user.daily_protein_target = targets["daily_protein_target"]
+    user.daily_fat_target = targets["daily_fat_target"]
+    user.daily_carbs_target = targets["daily_carbs_target"]
+    user.daily_fiber_target = targets["daily_fiber_target"]
+    user.daily_water_target_ml = targets["daily_water_target_ml"]
+    user.updated_at = datetime.now(timezone.utc)
 
     await session.flush()
     return user

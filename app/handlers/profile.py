@@ -23,6 +23,12 @@ def _format_profile_view(user: User) -> str:
     return (
         f"👤 Профиль: {user.first_name or user.username or 'пользователь'}\n\n"
         f"🎯 Цель: {p.goal}\n"
+        f"⚧ Пол: {user.sex or '—'}\n"
+        f"🎂 Возраст: {user.age or '—'}\n"
+        f"📏 Рост: {user.height_cm or '—'} см\n"
+        f"⚖️ Вес: {user.weight_kg or '—'} кг\n"
+        f"🏃 Активность: {user.activity_level or '—'}\n"
+        f"🥗 Тип питания: {user.diet_type or '—'}\n"
         f"⚠️ Аллергии: {p.allergies or '—'}\n"
         f"🚫 Ограничения: {p.restrictions or '—'}\n"
         f"👨\u200d👩\u200d👧\u200d👦 Людей в семье: {p.household_size or '—'}\n"
@@ -30,6 +36,9 @@ def _format_profile_view(user: User) -> str:
         f"💰 Бюджет: {p.budget or '—'}\n"
         f"🍳 Техника: {p.equipment or '—'}\n"
         f"🕐 Часовой пояс: {p.timezone or 'Europe/Moscow'}\n"
+        f"🔥 Цель ккал: {user.daily_calories_target or 0:.0f}\n"
+        f"🥩 Цель белка: {user.daily_protein_target or 0:.0f} г\n"
+        f"🌾 Цель клетчатки: {user.daily_fiber_target or 0:.0f} г\n"
     )
 
 

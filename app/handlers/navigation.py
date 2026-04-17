@@ -58,3 +58,25 @@ async def go_tip(callback: CallbackQuery):
         parse_mode="HTML",
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "go:log_food")
+async def go_log_food(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "Добавь запись о еде командой:\n"
+        "<code>/log_food курица 200 г</code>\n\n"
+        "Также поддерживается: <code>/log_meal яблоко</code>",
+        parse_mode="HTML",
+    )
+    await callback.answer()
+
+
+@router.callback_query(F.data == "go:today")
+async def go_today(callback: CallbackQuery):
+    await callback.message.edit_text(
+        "Покажу дневной итог командами:\n"
+        "<code>/today</code> — сводка за день\n"
+        "<code>/advice</code> — рекомендации по рациону",
+        parse_mode="HTML",
+    )
+    await callback.answer()
