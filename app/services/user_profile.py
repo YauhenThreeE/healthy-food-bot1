@@ -25,13 +25,22 @@ async def upsert_user_profile(
     )
     user = result.scalar_one_or_none()
     if user is None:
-        user = User(
-            telegram_id=telegram_id,
-            username=username,
-            first_name=first_name,
-        )
-        session.add(user)
-        await session.flush()
+        try:
+            user = User(
+                telegram_id=telegram_id,
+                username=username,
+                first_name=first_name,
+            )
+            session.add(user)
+            await session.flush()
+        except Exception:
+            await session.rollback()
+            result = await session.execute(
+                select(User)
+                .options(selectinload(User.profile))
+                .where(User.telegram_id == telegram_id)
+            )
+            user = result.scalar_one()
 
     if user.profile is None:
         user.profile = UserProfile()
@@ -72,10 +81,17 @@ async def ensure_telegram_user(
     user = await get_user_by_telegram(session, telegram_id)
     if user:
         return user
-    user = User(telegram_id=telegram_id, username=username, first_name=first_name)
-    session.add(user)
-    await session.flush()
-    return user
+    try:
+        user = User(telegram_id=telegram_id, username=username, first_name=first_name)
+        session.add(user)
+        await session.flush()
+        return user
+    except Exception:
+        await session.rollback()
+        user = await get_user_by_telegram(session, telegram_id)
+        if user:
+            return user
+        raise
 
 
 async def set_user_timezone(session: AsyncSession, telegram_id: int, tz_name: str) -> bool:
