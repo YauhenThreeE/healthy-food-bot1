@@ -35,12 +35,28 @@ _BASE_PRODUCTS: dict[str, ProductNutrients] = {
 }
 
 _ALIASES = {
+    "банана": "банан",
+    "бананов": "банан",
+    "гречки": "гречка",
+    "картофеля": "картофель",
     "куриная грудка": "курица",
     "куриное филе": "курица",
+    "курицы": "курица",
+    "молока": "молоко",
     "яйцо": "яйца",
     "яйца куриные": "яйца",
+    "яблока": "яблоко",
+    "яблок": "яблоко",
     "овсяные хлопья": "овсянка",
+    "овсянки": "овсянка",
+    "риса": "рис",
+    "творога": "творог",
 }
+
+
+def canonical_product_name(product_name: str) -> str:
+    key = normalize_product_name(product_name)
+    return _ALIASES.get(key, key)
 
 
 def supported_products() -> list[str]:
@@ -48,6 +64,4 @@ def supported_products() -> list[str]:
 
 
 def lookup_product(product_name: str) -> ProductNutrients | None:
-    key = normalize_product_name(product_name)
-    key = _ALIASES.get(key, key)
-    return _BASE_PRODUCTS.get(key)
+    return _BASE_PRODUCTS.get(canonical_product_name(product_name))

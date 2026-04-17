@@ -4,15 +4,25 @@ import re
 from dataclasses import dataclass
 from typing import Iterable
 
-from app.services.food_database import ProductNutrients
+from app.services.food_database import ProductNutrients, canonical_product_name
 
 _GRAM_PATTERNS = (
     re.compile(r"(?P<value>\d+(?:[.,]\d+)?)\s*(?:г|гр|грамм(?:а|ов)?)\b", re.IGNORECASE),
     re.compile(r"(?P<value>\d+(?:[.,]\d+)?)\s*(?:kg|кг)\b", re.IGNORECASE),
 )
+_PIECE_PATTERN = re.compile(
+    r"(?P<count>\d+(?:[.,]\d+)?)\s*(?:шт|штука|штуки|штук)\b",
+    re.IGNORECASE,
+)
 _COUNT_PATTERN = re.compile(r"(?P<count>\d+)\s+(?P<name>[а-яa-zё\s-]+)$", re.IGNORECASE)
 _CLEANER = re.compile(r"[^\w\s\-]")
 EGG_GRAMS = 55.0
+PIECE_GRAMS = {
+    "банан": 120.0,
+    "картофель": 150.0,
+    "яйца": EGG_GRAMS,
+    "яблоко": 180.0,
+}
 
 
 @dataclass(frozen=True)
@@ -23,6 +33,10 @@ class ParsedMealInput:
 
 def _to_float(text: str) -> float:
     return float(text.replace(",", "."))
+
+
+def _piece_grams(product_name: str) -> float:
+    return PIECE_GRAMS.get(canonical_product_name(product_name), 100.0)
 
 
 def parse_input(text: str) -> ParsedMealInput | None:
@@ -43,18 +57,29 @@ def parse_input(text: str) -> ParsedMealInput | None:
         product = (raw[: match.start()] + " " + raw[match.end() :]).strip()
         break
 
+    if grams is None:
+        piece_match = _PIECE_PATTERN.search(raw)
+        if piece_match:
+            count = _to_float(piece_match.group("count"))
+            product = (raw[: piece_match.start()] + " " + raw[piece_match.end() :]).strip()
+            normalized_for_piece = _CLEANER.sub(" ", product).strip().lower()
+            if not normalized_for_piece:
+                return None
+            return ParsedMealInput(
+                product=canonical_product_name(normalized_for_piece),
+                grams=count * _piece_grams(normalized_for_piece),
+            )
+
     normalized_product = _CLEANER.sub(" ", product).strip().lower()
     count_match = _COUNT_PATTERN.match(normalized_product)
     if count_match and grams is None:
         count = float(count_match.group("count"))
         name = count_match.group("name").strip()
-        if "яйц" in name:
-            return ParsedMealInput(product=name, grams=count * EGG_GRAMS)
-        return ParsedMealInput(product=name, grams=count * 100.0)
+        return ParsedMealInput(product=canonical_product_name(name), grams=count * _piece_grams(name))
 
     if not normalized_product:
         return None
-    return ParsedMealInput(product=normalized_product, grams=grams or 100.0)
+    return ParsedMealInput(product=canonical_product_name(normalized_product), grams=grams or 100.0)
 
 
 def calculate_nutrients(product: ProductNutrients, grams: float) -> dict[str, float]:
