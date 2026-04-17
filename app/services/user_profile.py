@@ -16,7 +16,13 @@ async def upsert_user_profile(
     first_name: Optional[str],
     profile_data: dict,
 ) -> User:
-    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    from sqlalchemy.orm import selectinload
+
+    result = await session.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.telegram_id == telegram_id)
+    )
     user = result.scalar_one_or_none()
     if user is None:
         user = User(
@@ -47,7 +53,13 @@ async def upsert_user_profile(
 
 
 async def get_user_by_telegram(session: AsyncSession, telegram_id: int) -> Optional[User]:
-    result = await session.execute(select(User).where(User.telegram_id == telegram_id))
+    from sqlalchemy.orm import selectinload
+
+    result = await session.execute(
+        select(User)
+        .options(selectinload(User.profile))
+        .where(User.telegram_id == telegram_id)
+    )
     return result.scalar_one_or_none()
 
 
