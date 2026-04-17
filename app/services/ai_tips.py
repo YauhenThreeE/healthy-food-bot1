@@ -28,6 +28,16 @@ SYSTEM_PROMPT = """Ты дружелюбный нутрициолог-ассис
 Не выдумывай медицинские факты; давай общие рекомендации по питанию и бытовые идеи блюд."""
 
 
+def _provider_label(base_url: str) -> str:
+    if "openrouter.ai" in base_url:
+        return "OpenRouter"
+    if "localhost" in base_url or "127.0.0.1" in base_url:
+        return "Ollama"
+    if "groq.com" in base_url:
+        return "Groq"
+    return "LLM-сервис"
+
+
 def _llm_client_and_model() -> Tuple[Optional[AsyncOpenAI], Optional[str], str]:
     """
     Возвращает (client, model, label) или (None, None, "") если ключей нет.
@@ -43,7 +53,7 @@ def _llm_client_and_model() -> Tuple[Optional[AsyncOpenAI], Optional[str], str]:
             timeout=90.0,
             max_retries=1,
         )
-        return client, model, "Groq"
+        return client, model, _provider_label(base)
 
     openai_key = (os.getenv("OPENAI_API_KEY") or "").strip()
     if openai_key:
@@ -59,7 +69,7 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
     if not client or not model:
         return (
             "Ключ для советов не настроен. Добавь в `.env` рядом с `bot.py`:\n"
-            "• GROQ_API_KEY — основной вариант (Groq);\n"
+            "• GROQ_API_KEY — ключ OpenRouter/Groq/Ollama-compatible сервиса;\n"
             "или\n"
             "• OPENAI_API_KEY — если остаёшься на OpenAI.\n\n"
             "Перезапусти бота. Пока могу: /onboarding и /menu."
@@ -83,9 +93,14 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
         )
     except AuthenticationError as e:
         log.warning("%s authentication failed: %s", provider, e)
-        if provider == "Groq":
+        if provider == "OpenRouter":
             return (
-                "Groq отклонил ключ (401). Проверь GROQ_API_KEY в `.env` (console.groq.com) "
+                "OpenRouter отклонил ключ (401). Проверь GROQ_API_KEY в `.env` "
+                "и перезапусти бота."
+            )
+        if provider in {"Groq", "Ollama", "LLM-сервис"}:
+            return (
+                f"{provider} отклонил ключ (401). Проверь GROQ_API_KEY в `.env` "
                 "и перезапусти бота."
             )
         return (
@@ -93,6 +108,12 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
         )
     except RateLimitError as e:
         log.warning("%s rate limit: %s", provider, e)
+        if provider == "OpenRouter":
+            return (
+                "OpenRouter сейчас ограничил запросы к выбранной модели. "
+                "Для free-моделей это часто значит, что провайдер временно перегружен. "
+                "Подожди минуту или выбери другую модель в GROQ_MODEL."
+            )
         return f"Слишком много запросов к {provider}. Подожди минуту и попробуй снова."
     except (APIConnectionError, APITimeoutError) as e:
         log.warning("%s network/timeout: %s", provider, e)
@@ -101,11 +122,12 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
         )
     except APIStatusError as e:
         log.warning("%s API error status=%s: %s", provider, getattr(e, "status_code", "?"), e)
-        hint = (
-            "Проверь GROQ_MODEL в `.env` (список моделей: console.groq.com/docs/models)."
-            if provider == "Groq"
-            else "Попробуй сменить OPENAI_MODEL в `.env`."
-        )
+        if provider == "OpenRouter":
+            hint = "Проверь GROQ_MODEL в `.env` или выбери другую модель в OpenRouter."
+        elif provider in {"Groq", "Ollama", "LLM-сервис"}:
+            hint = "Проверь GROQ_MODEL и GROQ_BASE_URL в `.env`."
+        else:
+            hint = "Попробуй сменить OPENAI_MODEL в `.env`."
         return (
             f"Сервис советов вернул ошибку (код {getattr(e, 'status_code', '?')}). "
             f"{hint}"
