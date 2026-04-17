@@ -11,7 +11,9 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
+from app.services.ai_memory import remember_fact
 from app.services.ai_tips import generate_tip
+from app.services.conversation_log import log_conversation_message
 from app.services.user_profile import ensure_telegram_user
 
 router = Router()
@@ -33,7 +35,7 @@ def _split_for_telegram(text: str) -> list[str]:
     return [p for p in parts if p] or ["Не удалось разбить ответ на сообщения."]
 
 
-@router.message(Command("tip", "advice"))
+@router.message(Command("tip"))
 async def cmd_tip(message: Message, command: CommandObject, session: AsyncSession):
     try:
         await ensure_telegram_user(
@@ -43,7 +45,6 @@ async def cmd_tip(message: Message, command: CommandObject, session: AsyncSessio
             message.from_user.first_name,
         )
         q = (command.args or "").strip() or None
-
         result = await session.execute(
             select(User)
             .options(selectinload(User.profile))
@@ -51,11 +52,25 @@ async def cmd_tip(message: Message, command: CommandObject, session: AsyncSessio
         )
         user = result.scalar_one_or_none()
         profile = user.profile if user else None
+        if not user:
+            await message.answer("Сначала запусти /start, затем повтори запрос.")
+            return
+        if q and "не люблю" in q.lower():
+            await remember_fact(
+                session,
+                user_id=user.id,
+                memory_key="preference_dislike",
+                memory_value=q,
+                memory_type="preference",
+                importance=0.7,
+            )
 
         async with ChatActionSender.typing(bot=message.bot, chat_id=message.chat.id):
             text = await generate_tip(profile, q)
+        await log_conversation_message(session, user.id, "user", q or "/tip", intent="tip")
         for chunk in _split_for_telegram(text):
             await message.answer(chunk)
+        await log_conversation_message(session, user.id, "assistant", text, intent="tip_reply")
     except Exception:
         log.exception("/tip handler failed")
         await message.answer(

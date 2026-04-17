@@ -119,6 +119,8 @@ async def on_menu_nav(callback: CallbackQuery, session: AsyncSession):
             meta.append(f"{d.prep_minutes} мин")
         if d.calories is not None:
             meta.append(f"~{d.calories} ккал")
+        if d.price is not None:
+            meta.append(f"{d.price:.0f} ₽")
         suffix = f" ({', '.join(meta)})" if meta else ""
         lines.append(f"• <b>{d.name}</b>{suffix}\n  {d.description[:180]}{'…' if len(d.description) > 180 else ''}")
 
@@ -141,6 +143,8 @@ async def on_dish_detail(callback: CallbackQuery, session: AsyncSession):
         meta.append(f"⏱ ~{dish.prep_minutes} мин")
     if dish.calories is not None:
         meta.append(f"🔥 ~{dish.calories} ккал")
+    if dish.price is not None:
+        meta.append(f"💰 {dish.price:.0f} ₽")
     head = " ".join(meta)
     text = (
         f"<b>{dish.name}</b>\n"

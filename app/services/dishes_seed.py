@@ -13,6 +13,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Завтраки",
         "prep_minutes": 15,
         "calories": 320,
+        "price": 290,
         "tags": ["клетчатка", "без жарки"],
     },
     {
@@ -22,6 +23,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Завтраки",
         "prep_minutes": 20,
         "calories": 280,
+        "price": 250,
         "tags": ["белок", "овощи"],
     },
     {
@@ -31,6 +33,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Завтраки",
         "prep_minutes": 25,
         "calories": 380,
+        "price": 350,
         "tags": ["полезные жиры"],
     },
     {
@@ -40,6 +43,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Завтраки",
         "prep_minutes": 10,
         "calories": 350,
+        "price": 320,
         "tags": ["быстро"],
     },
     {
@@ -49,6 +53,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Обеды",
         "prep_minutes": 35,
         "calories": 480,
+        "price": 490,
         "tags": ["белок", "киноа"],
     },
     {
@@ -58,6 +63,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Обеды",
         "prep_minutes": 15,
         "calories": 420,
+        "price": 390,
         "tags": ["вегетарианское"],
     },
     {
@@ -67,6 +73,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Обеды",
         "prep_minutes": 40,
         "calories": 450,
+        "price": 420,
         "tags": ["рыба"],
     },
     {
@@ -76,6 +83,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Обеды",
         "prep_minutes": 30,
         "calories": 520,
+        "price": 590,
         "tags": ["омега-3"],
     },
     {
@@ -85,6 +93,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Ужины",
         "prep_minutes": 30,
         "calories": 400,
+        "price": 450,
         "tags": ["низкокалорийно"],
     },
     {
@@ -94,6 +103,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Ужины",
         "prep_minutes": 35,
         "calories": 320,
+        "price": 370,
         "tags": ["веган"],
     },
     {
@@ -103,6 +113,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Ужины",
         "prep_minutes": 40,
         "calories": 430,
+        "price": 520,
         "tags": ["рыба"],
     },
     {
@@ -112,6 +123,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Ужины",
         "prep_minutes": 35,
         "calories": 300,
+        "price": 310,
         "tags": ["согревающее"],
     },
     {
@@ -121,6 +133,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Перекусы",
         "prep_minutes": 5,
         "calories": 200,
+        "price": 150,
         "tags": ["быстро"],
     },
     {
@@ -130,6 +143,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Перекусы",
         "prep_minutes": 5,
         "calories": 220,
+        "price": 190,
         "tags": ["белок"],
     },
     {
@@ -139,6 +153,7 @@ SEED_DISHES: list[dict] = [
         "category_title": "Перекусы",
         "prep_minutes": 10,
         "calories": 180,
+        "price": 220,
         "tags": ["клетчатка"],
     },
 ]

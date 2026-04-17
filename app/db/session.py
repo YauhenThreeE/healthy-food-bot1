@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.db.models import Base
@@ -45,3 +46,63 @@ async_session_maker = async_sessionmaker(
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await _apply_safe_schema_updates(conn)
+
+
+async def _apply_safe_schema_updates(conn) -> None:
+    """
+    Lightweight migration strategy for projects without Alembic.
+    Creates new tables via create_all and applies additive columns for SQLite.
+    """
+    if not DATABASE_URL.startswith("sqlite+"):
+        return
+
+    sqlite_additions: dict[str, dict[str, str]] = {
+        "users": {
+            "last_name": "TEXT",
+            "sex": "TEXT",
+            "age": "INTEGER",
+            "height_cm": "FLOAT",
+            "weight_kg": "FLOAT",
+            "target_weight_kg": "FLOAT",
+            "activity_level": "TEXT",
+            "goal": "TEXT",
+            "diet_type": "TEXT",
+            "allergies_json": "JSON",
+            "excluded_products_json": "JSON",
+            "health_flags_json": "JSON",
+            "daily_calories_target": "FLOAT",
+            "daily_protein_target": "FLOAT",
+            "daily_fat_target": "FLOAT",
+            "daily_carbs_target": "FLOAT",
+            "daily_fiber_target": "FLOAT",
+            "daily_water_target_ml": "FLOAT",
+            "updated_at": "DATETIME",
+        },
+        "dishes": {
+            "recipe_json": "JSON",
+            "total_weight_g": "FLOAT",
+            "calories_total": "FLOAT",
+            "protein_total": "FLOAT",
+            "fat_total": "FLOAT",
+            "carbs_total": "FLOAT",
+            "fiber_total": "FLOAT",
+            "sugar_total": "FLOAT",
+            "sodium_mg_total": "FLOAT",
+            "water_ml_total": "FLOAT",
+            "micronutrients_json": "JSON",
+            "updated_at": "DATETIME",
+        },
+    }
+
+    for table_name, columns in sqlite_additions.items():
+        pragma = await conn.execute(text(f"PRAGMA table_info({table_name})"))
+        existing = {row[1] for row in pragma.fetchall()}
+        for column_name, sqlite_type in columns.items():
+            if column_name in existing:
+                continue
+            await conn.execute(
+                text(
+                    f"ALTER TABLE {table_name} ADD COLUMN {column_name} {sqlite_type}"
+                )
+            )
