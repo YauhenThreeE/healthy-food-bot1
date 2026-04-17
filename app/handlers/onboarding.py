@@ -12,6 +12,7 @@ from app.keyboards.onboarding import (
     budget_keyboard,
     confirm_keyboard,
 )
+from app.keyboards.start import after_start_keyboard
 
 router = Router()
 
@@ -179,7 +180,8 @@ async def confirm_yes(callback: CallbackQuery, state: FSMContext, session: Async
     await callback.message.edit_text(
         "Профиль сохранен ✅\n\n"
         f"{format_profile(data)}\n"
-        "Теперь я смогу подбирать тебе подходящие блюда и наборы."
+        "Что дальше?",
+        reply_markup=after_start_keyboard(show_profile=True),
     )
     await state.clear()
     await callback.answer()
