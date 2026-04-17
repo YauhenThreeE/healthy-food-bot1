@@ -8,7 +8,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db.models import Dish, User
-from app.repositories.nutrition import get_daily_meal_logs, get_product_by_name, search_products
+from app.repositories.nutrition import (
+    find_products_mentioned_in_text,
+    get_daily_meal_logs,
+    get_product_by_name,
+    search_products,
+)
 from app.services.ai_memory import load_memory_context, remember_fact
 from app.services.conversation_log import log_conversation_message
 from app.services.food_database import lookup_product, supported_products
@@ -21,6 +26,16 @@ from app.services.product_ai_estimator import estimate_and_create_product
 from app.services.user_profile import ensure_telegram_user
 
 router = Router()
+
+
+def _clean_log_food_args(args: str) -> str:
+    command_markers = ("/log_food", "/log_meal")
+    cleaned = args.strip()
+    for marker in command_markers:
+        index = cleaned.find(marker)
+        if index > 0:
+            cleaned = cleaned[:index].strip()
+    return cleaned
 
 
 def _fmt_daily_line(name: str, fact: float, target: float, unit: str) -> str:
@@ -114,13 +129,26 @@ async def _resolve_nutrition_entry(
         }
         return payload, None
 
-    estimated_product = await estimate_and_create_product(session, parsed.product)
-    if estimated_product:
-        macros = nutrition_for_grams(estimated_product, parsed.grams)
+    estimate = await estimate_and_create_product(session, parsed.product)
+    if estimate.product:
+        macros = nutrition_for_grams(estimate.product, parsed.grams)
         payload = {
-            "product_id": estimated_product.id,
-            "custom_name": estimated_product.name,
+            "product_id": estimate.product.id,
+            "custom_name": estimate.product.name,
             "estimated_by_ai": True,
+            **macros,
+        }
+        return payload, None
+
+    mentioned_products = await find_products_mentioned_in_text(session, parsed.product, limit=1)
+    if mentioned_products:
+        db_product = mentioned_products[0]
+        macros = nutrition_for_grams(db_product, parsed.grams)
+        payload = {
+            "product_id": db_product.id,
+            "custom_name": parsed.product,
+            "matched_base_product": db_product.name,
+            "ai_error": estimate.error,
             **macros,
         }
         return payload, None
@@ -128,7 +156,8 @@ async def _resolve_nutrition_entry(
     suggestions = [product.name for product in db_matches]
     suggestions.extend(name for name in supported_products() if name not in suggestions)
     return None, (
-        "Продукт не найден. Сейчас лучше писать базовый продукт и вес, например:\n"
+        f"ИИ не смог оценить продукт: {estimate.error or 'нет ответа'}.\n\n"
+        "Продукт не найден в локальной базе. Сейчас лучше писать базовый продукт и вес, например:\n"
         "• /log_food банан 1 шт\n"
         "• /log_food курица 200 г\n"
         "• /log_food гречка 150 г\n\n"
@@ -138,7 +167,7 @@ async def _resolve_nutrition_entry(
 
 @router.message(Command("log_food", "log_meal"))
 async def cmd_log_food(message: Message, command: CommandObject, session: AsyncSession):
-    args = (command.args or "").strip()
+    args = _clean_log_food_args(command.args or "")
     if not args:
         await message.answer("Напиши еду и вес: /log_food курица 200 г")
         return
@@ -157,7 +186,13 @@ async def cmd_log_food(message: Message, command: CommandObject, session: AsyncS
         user=user,
         payload=payload,
         meal_type="snack",
-        source="ai_estimated" if payload.get("estimated_by_ai") else "manual",
+        source=(
+            "ai_estimated"
+            if payload.get("estimated_by_ai")
+            else "base_product_fallback"
+            if payload.get("matched_base_product")
+            else "manual"
+        ),
         raw_input_text=args,
     )
     await log_conversation_message(session, user.id, "user", args, intent="log_food")
@@ -169,16 +204,19 @@ async def cmd_log_food(message: Message, command: CommandObject, session: AsyncS
         intent="log_food_result",
     )
 
-    ai_note = (
-        "\n• Пищевая ценность оценена ИИ, проверь при необходимости."
-        if payload.get("estimated_by_ai")
-        else ""
-    )
+    notes = []
+    if payload.get("estimated_by_ai"):
+        notes.append("• Пищевая ценность оценена ИИ, проверь при необходимости.")
+    if payload.get("matched_base_product"):
+        notes.append(f"• Расчёт сделан по базовому продукту: {payload['matched_base_product']}.")
+    if payload.get("ai_error"):
+        notes.append(f"• ИИ не смог оценить блюдо: {payload['ai_error']}.")
+    notes_text = ("\n" + "\n".join(notes)) if notes else ""
     await message.answer(
         "Добавлено в дневник:\n"
         f"• {payload.get('custom_name')} — {payload.get('grams', 0):.0f} г\n"
         f"• {payload.get('calories', 0):.1f} ккал"
-        f"{ai_note}\n\n"
+        f"{notes_text}\n\n"
         f"Текущий итог дня: {summary.calories_fact:.1f} / {summary.calories_target:.0f} ккал"
     )
 

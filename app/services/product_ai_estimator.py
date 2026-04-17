@@ -3,9 +3,17 @@ from __future__ import annotations
 import json
 import logging
 import re
+from dataclasses import dataclass
 from typing import Any
 
-from openai import OpenAIError
+from openai import (
+    APIConnectionError,
+    APIStatusError,
+    APITimeoutError,
+    AuthenticationError,
+    OpenAIError,
+    RateLimitError,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import Product
@@ -17,8 +25,24 @@ from app.services.nutrition_products import create_product_entry
 log = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = """Ты справочник пищевой ценности.
-Оцени БЖУ и калорийность продукта на 100 г съедобной части.
-Верни только JSON без markdown и пояснений."""
+Оцени БЖУ и калорийность продукта или готового блюда на 100 г съедобной части.
+Если указано блюдо вроде "лисички в сметане", оцени типичный готовый вариант целиком.
+Верни только JSON без markdown и пояснений.
+Формат:
+{
+  "name": "название",
+  "category": "категория",
+  "calories_100g": 0,
+  "protein_100g": 0,
+  "fat_100g": 0,
+  "carbs_100g": 0,
+  "fiber_100g": 0,
+  "sugar_100g": 0,
+  "sodium_mg_100g": 0,
+  "saturated_fat_100g": 0,
+  "water_ml_100g": 0,
+  "allergens_json": {}
+}"""
 
 REQUIRED_FLOAT_FIELDS = (
     "calories_100g",
@@ -43,6 +67,12 @@ LIMITS = {
     "saturated_fat_100g": (0.0, 100.0),
     "water_ml_100g": (0.0, 100.0),
 }
+
+
+@dataclass(frozen=True)
+class ProductEstimateResult:
+    product: Product | None = None
+    error: str | None = None
 
 
 def _extract_json(text: str) -> dict[str, Any] | None:
@@ -94,21 +124,43 @@ def _normalize_payload(product_name: str, data: dict[str, Any]) -> dict[str, Any
     return payload
 
 
+def _payload_is_usable(payload: dict[str, Any]) -> bool:
+    calories = float(payload.get("calories_100g", 0) or 0)
+    macros = (
+        float(payload.get("protein_100g", 0) or 0),
+        float(payload.get("fat_100g", 0) or 0),
+        float(payload.get("carbs_100g", 0) or 0),
+    )
+    return calories > 0 and any(value > 0 for value in macros)
+
+
+def _friendly_ai_error(exc: OpenAIError) -> str:
+    if isinstance(exc, AuthenticationError):
+        return "ключ ИИ отклонён"
+    if isinstance(exc, RateLimitError):
+        return "лимит или перегрузка модели"
+    if isinstance(exc, (APIConnectionError, APITimeoutError)):
+        return "нет связи с ИИ или таймаут"
+    if isinstance(exc, APIStatusError):
+        return f"сервис ИИ вернул ошибку {getattr(exc, 'status_code', '?')}"
+    return "сервис ИИ вернул ошибку"
+
+
 async def estimate_and_create_product(
     session: AsyncSession,
     product_name: str,
-) -> Product | None:
+) -> ProductEstimateResult:
     normalized_name = normalize_product_name(product_name)
     if not normalized_name:
-        return None
+        return ProductEstimateResult(error="пустое название продукта")
 
     existing = await get_product_by_name(session, normalized_name)
     if existing:
-        return existing
+        return ProductEstimateResult(product=existing)
 
     provider = get_ai_provider()
     if not provider:
-        return None
+        return ProductEstimateResult(error="ключ ИИ не настроен")
 
     try:
         completion = await provider.client.chat.completions.create(
@@ -120,28 +172,32 @@ async def estimate_and_create_product(
                 {
                     "role": "user",
                     "content": (
-                        f"Продукт: {normalized_name}\n"
+                        f"Продукт или блюдо: {normalized_name}\n"
                         "Верни JSON строго с полями: "
                         "name, category, calories_100g, protein_100g, fat_100g, "
                         "carbs_100g, fiber_100g, sugar_100g, sodium_mg_100g, "
                         "saturated_fat_100g, water_ml_100g, allergens_json. "
-                        "Если продукт общий, оцени типичный вариант без бренда."
+                        "Не добавляй текст вне JSON. Если это блюдо, оцени типичный готовый рецепт."
                     ),
                 },
             ],
         )
     except OpenAIError as exc:
         log.warning("Could not estimate product nutrition via AI: %s", exc)
-        return None
+        return ProductEstimateResult(error=_friendly_ai_error(exc))
 
     content = completion.choices[0].message.content or ""
     data = _extract_json(content)
     if not data:
         log.warning("AI returned non-JSON nutrition estimate: %s", content[:500])
-        return None
+        return ProductEstimateResult(error="ИИ вернул ответ не в формате JSON")
 
     payload = _normalize_payload(normalized_name, data)
+    if not _payload_is_usable(payload):
+        log.warning("AI returned unusable nutrition estimate: %s", data)
+        return ProductEstimateResult(error="ИИ вернул неполные пищевые данные")
+
     existing = await get_product_by_name(session, payload["name"])
     if existing:
-        return existing
-    return await create_product_entry(session, payload)
+        return ProductEstimateResult(product=existing)
+    return ProductEstimateResult(product=await create_product_entry(session, payload))

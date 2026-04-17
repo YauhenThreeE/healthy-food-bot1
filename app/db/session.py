@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from dotenv import load_dotenv
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -10,6 +12,8 @@ from app.db.models import Base
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data"
+
+load_dotenv(BASE_DIR / ".env")
 
 
 def _default_sqlite_url() -> str:
@@ -25,7 +29,27 @@ def get_database_url() -> str:
         url = "postgresql+asyncpg://" + url[len("postgres://") :]
     elif url.startswith("postgresql://") and "+asyncpg" not in url:
         url = "postgresql+asyncpg://" + url[len("postgresql://") :]
+    if url.startswith("postgresql+asyncpg://"):
+        url = _normalize_asyncpg_url(url)
     return url
+
+
+def _normalize_asyncpg_url(url: str) -> str:
+    parsed = urlsplit(url)
+    query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    sslmode = query.pop("sslmode", "").lower()
+    query.pop("channel_binding", None)
+    if sslmode and sslmode not in {"disable", "allow", "prefer"}:
+        query.setdefault("ssl", "require")
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query),
+            parsed.fragment,
+        )
+    )
 
 
 DATABASE_URL = get_database_url()

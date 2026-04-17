@@ -25,6 +25,26 @@ async def search_products(session: AsyncSession, query: str, limit: int = 10) ->
     return list((await session.execute(stmt)).scalars())
 
 
+async def find_products_mentioned_in_text(
+    session: AsyncSession,
+    text: str,
+    limit: int = 5,
+) -> list[Product]:
+    normalized_text = f" {text.strip().lower()} "
+    if not normalized_text.strip():
+        return []
+
+    products = list((await session.execute(select(Product))).scalars())
+    matches = [
+        product
+        for product in products
+        if len(product.name.strip()) >= 3
+        and f" {product.name.strip().lower()} " in normalized_text
+    ]
+    matches.sort(key=lambda product: (-len(product.name), not product.is_verified, product.name))
+    return matches[:limit]
+
+
 async def get_product_by_name(session: AsyncSession, name: str) -> Product | None:
     stmt = select(Product).where(func.lower(Product.name) == name.strip().lower())
     return (await session.execute(stmt)).scalar_one_or_none()
