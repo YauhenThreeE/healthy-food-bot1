@@ -34,25 +34,41 @@ async def _fetch_dishes_by_slug(
     return list((await session.execute(stmt)).scalars())
 
 
-def _format_cart(cart: dict[int, int], dish_names: dict[int, str]) -> str:
+def _format_cart(
+    cart: dict[int, int],
+    dish_names: dict[int, str],
+    dish_prices: dict[int, float] | None = None,
+) -> str:
     if not cart:
         return "—"
+    prices = dish_prices or {}
     lines = []
+    total = 0.0
     for dish_id, qty in cart.items():
         name = dish_names.get(dish_id, f"#{dish_id}")
-        lines.append(f"{name} x{qty}")
-    return ", ".join(lines)
+        price = prices.get(dish_id, 0)
+        subtotal = price * qty
+        total += subtotal
+        if price:
+            lines.append(f"  {name} x{qty} — {subtotal:.0f} ₽")
+        else:
+            lines.append(f"  {name} x{qty}")
+    text = "\n".join(lines)
+    if total > 0:
+        text += f"\n\n💰 Итого: {total:.0f} ₽"
+    return text
 
 
 def format_order(data: dict) -> str:
     cart: dict[int, int] = data.get("cart", {})
     dish_names: dict[int, str] = data.get("dish_names", {})
-    items_text = _format_cart(cart, dish_names) if cart else data.get("items", "—")
+    dish_prices: dict[int, float] = data.get("dish_prices", {})
+    items_text = _format_cart(cart, dish_names, dish_prices) if cart else data.get("items", "—")
     return (
         "🧾 Черновик заказа:\n\n"
         f"👤 Клиент: {data.get('client_name', '-')}\n"
         f"📞 Телефон: {data.get('client_phone', '-')}\n"
-        f"🍱 Заказ: {items_text}\n"
+        f"🍱 Заказ:\n{items_text}\n"
         f"📍 Адрес: {data.get('address', '-')}\n"
         f"🕒 Время доставки: {data.get('delivery_time', '-')}\n"
     )
@@ -76,7 +92,7 @@ async def order_client_name(message: Message, state: FSMContext):
 async def order_client_phone(
     message: Message, state: FSMContext, session: AsyncSession
 ):
-    await state.update_data(client_phone=message.text.strip(), cart={}, dish_names={})
+    await state.update_data(client_phone=message.text.strip(), cart={}, dish_names={}, dish_prices={})
     await state.set_state(OrderStates.choose_category)
     categories = await _fetch_categories(session)
     if not categories:
@@ -135,14 +151,17 @@ async def on_dish_add(
     data = await state.get_data()
     cart: dict[int, int] = data.get("cart", {})
     dish_names: dict[int, str] = data.get("dish_names", {})
+    dish_prices: dict[int, float] = data.get("dish_prices", {})
 
     cart[dish_id] = cart.get(dish_id, 0) + 1
 
     dish = await session.get(Dish, dish_id)
     if dish:
         dish_names[dish_id] = dish.name
+        if dish.price:
+            dish_prices[dish_id] = dish.price
 
-    await state.update_data(cart=cart, dish_names=dish_names)
+    await state.update_data(cart=cart, dish_names=dish_names, dish_prices=dish_prices)
 
     dishes = await _fetch_dishes_by_slug(session, slug)
     total = sum(cart.values())
@@ -210,10 +229,11 @@ async def on_dishes_done(callback: CallbackQuery, state: FSMContext):
         return
 
     dish_names = data.get("dish_names", {})
-    summary = _format_cart(cart, dish_names)
+    dish_prices = data.get("dish_prices", {})
+    summary = _format_cart(cart, dish_names, dish_prices)
 
     await state.set_state(OrderStates.address)
-    await callback.message.edit_text(f"🛒 Выбрано: {summary}\n\nУкажи адрес доставки.")
+    await callback.message.edit_text(f"🛒 Выбрано:\n{summary}\n\nУкажи адрес доставки.")
     await callback.answer()
 
 

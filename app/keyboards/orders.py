@@ -40,7 +40,8 @@ def order_dishes_keyboard(
     rows: list[list[InlineKeyboardButton]] = []
     for d in dishes:
         qty = cart.get(d.id, 0)
-        label = f"{d.name}  [{qty}]" if qty > 0 else d.name
+        price_str = f" · {d.price:.0f} ₽" if d.price else ""
+        label = f"{d.name}{price_str}  [{qty}]" if qty > 0 else f"{d.name}{price_str}"
         rows.append([InlineKeyboardButton(text=label, callback_data="noop")])
         rows.append([
             InlineKeyboardButton(text="➖", callback_data=f"od-:{d.id}:{category_slug}"),

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import List, Optional
 
-from sqlalchemy import BigInteger, Boolean, Date, DateTime, ForeignKey, Integer, JSON, String, Text, func
+from sqlalchemy import BigInteger, Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String, Text, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -60,6 +60,7 @@ class Dish(Base):
     category_title: Mapped[str] = mapped_column(String(128), default="")
     prep_minutes: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     calories: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    price: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     tags: Mapped[Optional[List[str]]] = mapped_column(JSON, nullable=True)
 
 
