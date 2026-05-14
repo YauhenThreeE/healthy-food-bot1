@@ -6,6 +6,7 @@ from pathlib import Path
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
+from aiogram.exceptions import TelegramAPIError
 from dotenv import load_dotenv
 
 from sqlalchemy import select
@@ -14,6 +15,7 @@ from sqlalchemy.orm import selectinload
 
 from app.db.models import User
 from app.db.session import async_session_maker, init_db
+from app.handlers.admin import router as admin_router
 from app.handlers.catalog import router as catalog_router
 from app.handlers.food_log import router as food_log_router
 from app.handlers.navigation import router as navigation_router
@@ -25,6 +27,7 @@ from app.handlers.tips import router as tips_router
 from app.keyboards.start import after_start_keyboard
 from app.middlewares.db import DbSessionMiddleware
 from app.services.dishes_seed import seed_dishes_if_empty
+from app.services.periodic_nutrition_reports import nutrition_report_loop
 from app.services.reminders_runner import reminder_loop
 from app.services.products_seed import seed_products_if_empty
 from app.services.user_profile import ensure_telegram_user
@@ -40,6 +43,7 @@ logging.basicConfig(
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
+ADMIN_TELEGRAM_ID = (os.getenv("ADMIN_TELEGRAM_ID") or "").strip()
 
 if not BOT_TOKEN:
     raise ValueError(
@@ -52,6 +56,7 @@ dp = Dispatcher()
 
 dp.update.middleware(DbSessionMiddleware())
 
+dp.include_router(admin_router)
 dp.include_router(profile_router)
 dp.include_router(tips_router)
 dp.include_router(food_log_router)
@@ -62,10 +67,45 @@ dp.include_router(reminders_router)
 dp.include_router(navigation_router)
 
 
+def _admin_chat_id() -> int | None:
+    if not ADMIN_TELEGRAM_ID:
+        return None
+    try:
+        return int(ADMIN_TELEGRAM_ID)
+    except ValueError:
+        logging.getLogger(__name__).warning("Invalid ADMIN_TELEGRAM_ID=%r", ADMIN_TELEGRAM_ID)
+        return None
+
+
+async def notify_admin_about_new_user(message: Message) -> None:
+    admin_id = _admin_chat_id()
+    u = message.from_user
+    if not admin_id or not u or u.id == admin_id:
+        return
+
+    username = f"@{u.username}" if u.username else "без username"
+    full_name = " ".join(part for part in [u.first_name, u.last_name] if part) or "без имени"
+    try:
+        await bot.send_message(
+            admin_id,
+            "Новый пользователь в боте:\n"
+            f"ID: {u.id}\n"
+            f"Имя: {full_name}\n"
+            f"Username: {username}\n"
+            f"Язык: {u.language_code or '-'}",
+        )
+    except TelegramAPIError:
+        logging.getLogger(__name__).exception("Could not notify admin about new user")
+
+
 @dp.message(CommandStart())
 async def start_handler(message: Message, session: AsyncSession):
     u = message.from_user
+    existing = await session.execute(select(User.id).where(User.telegram_id == u.id))
+    is_new_user = existing.scalar_one_or_none() is None
     await ensure_telegram_user(session, u.id, u.username, u.first_name)
+    if is_new_user:
+        await notify_admin_about_new_user(message)
 
     result = await session.execute(
         select(User)
@@ -114,6 +154,11 @@ async def help_handler(message: Message):
         "/remind ЧЧ:ММ текст — добавить\n"
         "/reminders — список и удаление\n"
         "/timezone — часовой пояс\n\n"
+        "Админ:\n"
+        "/admin_report — общий отчёт\n"
+        "/admin_users — последние пользователи\n"
+        "/admin_user <telegram_id> — карточка пользователя\n"
+        "/admin_food <telegram_id> — последние записи еды\n\n"
         "/help — эта справка"
     )
 
@@ -130,6 +175,7 @@ async def main():
         await session.commit()
 
     asyncio.create_task(reminder_loop(bot))
+    asyncio.create_task(nutrition_report_loop(bot))
     await dp.start_polling(bot)
 
 

@@ -1,36 +1,26 @@
 # AGENTS.md
 
-## Cursor Cloud specific instructions
+## Project
 
 This is a Python Telegram bot (`aiogram 3.x`) for healthy meal ordering and nutrition tracking.
 
-### Running the bot
+Main goals:
+- help users choose healthy meals;
+- track orders and nutrition-related preferences;
+- support AI tips through local/Ollama-compatible API when available.
+
+## Important safety rules
+
+- Do not read, print, copy, modify, or expose `.env`.
+- Do not reveal secrets, tokens, API keys, database URLs, cookies, or credentials.
+- Use `.env.example` for examples instead of `.env`.
+- Never hardcode real tokens into code.
+- Do not delete the SQLite database or user/order data without explicit confirmation.
+- Do not run destructive commands like `rm -rf`, database wipes, or mass file deletion without explicit confirmation.
+- Before large refactoring, explain the plan briefly.
+
+## Running the bot
 
 ```bash
 source .venv/bin/activate
-python bot.py
-```
-
-Requires `BOT_TOKEN` in `.env` (Telegram bot token from @BotFather — available as a Cursor Cloud secret). Without it, `bot.py` raises `ValueError` at import time. Copy `.env.example` to `.env` and fill in the token.
-
-**Polling conflict**: Telegram allows only one long-polling connection per bot token. If you see `ConflictError: terminated by other getUpdates request`, stop the other running instance first.
-
-### Key caveats
-
-- **Database**: SQLite by default (`./data/healthy_food.db`), auto-created on first run via `init_db()`. No migrations needed — uses `create_all()`.
-- **Seeding**: 15 dishes are auto-seeded on startup if the `dishes` table is empty.
-- **AI tips** (`/tip` command): Uses **Ollama** running locally at `http://localhost:11434`. The code uses `AsyncOpenAI` which is compatible with Ollama's `/v1` endpoint. Configured via Groq env vars: `GROQ_API_KEY=ollama`, `GROQ_BASE_URL=http://localhost:11434/v1`, `GROQ_MODEL=llama3`. Ollama must be running on the host for `/tip` to work. Gracefully degrades with a user-friendly message if no keys are set.
-- **No test suite**: The repo has no automated tests. Verify changes by running `python bot.py` with a valid `BOT_TOKEN` and testing commands in Telegram.
-- **Lint**: Run `ruff check .` for linting. There is one pre-existing unused import warning in `app/middlewares/db.py`. Run `pyright .` for type checking (pre-existing type errors exist due to aiogram nullable `from_user` patterns).
-- **No Docker/Makefile/CI**: Single-process app, no build step.
-
-### Environment variables (see `.env.example`)
-
-| Variable | Required | Default |
-|---|---|---|
-| `BOT_TOKEN` | Yes (secret) | — |
-| `GROQ_API_KEY` | No | `ollama` |
-| `GROQ_BASE_URL` | No | `http://localhost:11434/v1` |
-| `GROQ_MODEL` | No | `llama3` |
-| `OPENAI_API_KEY` | No | — |
-| `DATABASE_URL` | No | SQLite at `./data/healthy_food.db` |
+python bot.py       

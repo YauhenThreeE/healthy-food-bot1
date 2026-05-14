@@ -86,3 +86,66 @@ async def nutrition_advice_daily(
     except OpenAIError as exc:
         log.warning("nutrition advice fallback to rules: %s", exc)
         return _rule_based_advice(totals, targets)
+
+
+async def nutrition_periodic_report(
+    totals: dict[str, float],
+    items: list[dict[str, Any]],
+    user: User | None,
+    hours: int = 8,
+) -> str:
+    targets = _targets_from_user(user)
+    provider = get_ai_provider()
+    payload = {
+        "period_hours": hours,
+        "items": items,
+        "totals": totals,
+        "daily_targets": targets,
+        "goal": user.goal if user else "",
+        "diet_type": user.diet_type if user else "",
+    }
+    if not provider:
+        advice = _rule_based_advice(totals, targets)
+        return (
+            f"Анализ питания за последние {hours} ч:\n"
+            f"Калории: {totals.get('calories', 0):.0f} ккал, "
+            f"белки: {totals.get('protein', 0):.1f} г, "
+            f"жиры: {totals.get('fat', 0):.1f} г, "
+            f"углеводы: {totals.get('carbs', 0):.1f} г.\n\n"
+            f"Что дальше:\n{advice}"
+        )
+
+    try:
+        completion = await provider.client.chat.completions.create(
+            model=provider.model,
+            temperature=0.4,
+            max_tokens=650,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {
+                    "role": "user",
+                    "content": (
+                        f"Проанализируй питание пользователя за последние {hours} часов. "
+                        "Коротко: 1) что уже съедено, 2) баланс БЖУ/калорий, "
+                        "3) что лучше съесть в следующие 8 часов. "
+                        "Не давай медицинских диагнозов. Используй только данные JSON:\n"
+                        f"{json.dumps(payload, ensure_ascii=False)}"
+                    ),
+                },
+            ],
+        )
+        text = (completion.choices[0].message.content or "").strip()
+        if text:
+            return text[:1500]
+    except OpenAIError as exc:
+        log.warning("periodic nutrition report fallback to rules: %s", exc)
+
+    advice = _rule_based_advice(totals, targets)
+    return (
+        f"Анализ питания за последние {hours} ч:\n"
+        f"Калории: {totals.get('calories', 0):.0f} ккал, "
+        f"белки: {totals.get('protein', 0):.1f} г, "
+        f"жиры: {totals.get('fat', 0):.1f} г, "
+        f"углеводы: {totals.get('carbs', 0):.1f} г.\n\n"
+        f"Что дальше:\n{advice}"
+    )
