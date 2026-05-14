@@ -13,6 +13,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.config import get_admin_id
 from app.db.models import User
 from app.db.session import async_session_maker, init_db
 from app.handlers.admin import router as admin_router
@@ -22,7 +23,9 @@ from app.handlers.navigation import router as navigation_router
 from app.handlers.onboarding import router as onboarding_router
 from app.handlers.orders import router as orders_router
 from app.handlers.profile import router as profile_router
+from app.handlers.questionnaire import router as questionnaire_router
 from app.handlers.reminders import router as reminders_router
+from app.handlers.survey import router as survey_router
 from app.handlers.tips import router as tips_router
 from app.keyboards.start import after_start_keyboard
 from app.middlewares.db import DbSessionMiddleware
@@ -43,7 +46,6 @@ logging.basicConfig(
 )
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "").strip()
-ADMIN_TELEGRAM_ID = (os.getenv("ADMIN_TELEGRAM_ID") or "").strip()
 
 if not BOT_TOKEN:
     raise ValueError(
@@ -58,6 +60,8 @@ dp.update.middleware(DbSessionMiddleware())
 
 dp.include_router(admin_router)
 dp.include_router(profile_router)
+dp.include_router(questionnaire_router)
+dp.include_router(survey_router)
 dp.include_router(tips_router)
 dp.include_router(food_log_router)
 dp.include_router(orders_router)
@@ -68,13 +72,7 @@ dp.include_router(navigation_router)
 
 
 def _admin_chat_id() -> int | None:
-    if not ADMIN_TELEGRAM_ID:
-        return None
-    try:
-        return int(ADMIN_TELEGRAM_ID)
-    except ValueError:
-        logging.getLogger(__name__).warning("Invalid ADMIN_TELEGRAM_ID=%r", ADMIN_TELEGRAM_ID)
-        return None
+    return get_admin_id()
 
 
 async def notify_admin_about_new_user(message: Message) -> None:
@@ -137,7 +135,13 @@ async def help_handler(message: Message):
         "Доступные команды:\n\n"
         "👤 Профиль\n"
         "/onboarding — настройка профиля\n"
-        "/profile — посмотреть свой профиль\n\n"
+        "/profile — посмотреть свой профиль\n"
+        "/survey — короткий опрос по питанию\n\n"
+        "📋 Анкета программы\n"
+        "/anketa — заполнить анкету Hey Health\n"
+        "/my_anketa — статус анкеты\n"
+        "/restart_anketa — начать анкету заново\n"
+        "/cancel — отменить активную анкету\n\n"
         "🍽 Еда\n"
         "/menu — каталог блюд\n"
         "/order — оформить заказ\n\n"
@@ -158,7 +162,13 @@ async def help_handler(message: Message):
         "/admin_report — общий отчёт\n"
         "/admin_users — последние пользователи\n"
         "/admin_user <telegram_id> — карточка пользователя\n"
-        "/admin_food <telegram_id> — последние записи еды\n\n"
+        "/admin_food <telegram_id> — последние записи еды\n"
+        "/admin_questionnaires — последние анкеты\n"
+        "/admin_participant <telegram_id> — карточка участника марафона\n"
+        "/admin_note <telegram_id> <текст> — заметка по участнику\n"
+        "/admin_notes <telegram_id> — последние заметки\n"
+        "/admin_sync_profiles — пересобрать карточки из анкет\n"
+        "/admin_export_participants — CSV с карточками\n\n"
         "/help — эта справка"
     )
 

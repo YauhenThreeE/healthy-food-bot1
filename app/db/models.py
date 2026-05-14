@@ -63,6 +63,96 @@ class User(Base):
     )
 
 
+class Questionnaire(Base):
+    __tablename__ = "questionnaires"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    status: Mapped[str] = mapped_column(String(32), default="in_progress", index=True)
+    answers_json: Mapped[str] = mapped_column(Text, default="{}")
+    current_question_index: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    files: Mapped[List["QuestionnaireFile"]] = relationship(
+        back_populates="questionnaire", cascade="all, delete-orphan"
+    )
+    participant_profiles: Mapped[List["ParticipantProfile"]] = relationship(
+        back_populates="source_questionnaire"
+    )
+
+
+class QuestionnaireFile(Base):
+    __tablename__ = "questionnaire_files"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    questionnaire_id: Mapped[int] = mapped_column(
+        ForeignKey("questionnaires.id", ondelete="CASCADE"), index=True
+    )
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    file_id: Mapped[str] = mapped_column(String(512))
+    file_unique_id: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    file_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    mime_type: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    questionnaire: Mapped[Questionnaire] = relationship(back_populates="files")
+
+
+class ParticipantProfile(Base):
+    __tablename__ = "participant_profiles"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, unique=True, index=True)
+    username: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    telegram_full_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    questionnaire_id: Mapped[Optional[int]] = mapped_column(
+        ForeignKey("questionnaires.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    questionnaire_status: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    profile_json: Mapped[str] = mapped_column(Text, default="{}")
+    summary_text: Mapped[str] = mapped_column(Text, default="")
+    risk_flags_text: Mapped[str] = mapped_column(Text, default="")
+    coach_focus_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+    source_questionnaire: Mapped[Optional[Questionnaire]] = relationship(
+        back_populates="participant_profiles"
+    )
+    notes: Mapped[List["ParticipantNote"]] = relationship(
+        back_populates="participant_profile", cascade="all, delete-orphan"
+    )
+
+
+class ParticipantNote(Base):
+    __tablename__ = "participant_notes"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    participant_profile_id: Mapped[int] = mapped_column(
+        ForeignKey("participant_profiles.id", ondelete="CASCADE"), index=True
+    )
+    telegram_user_id: Mapped[int] = mapped_column(BigInteger, index=True)
+    author_telegram_id: Mapped[Optional[int]] = mapped_column(BigInteger, nullable=True)
+    source: Mapped[str] = mapped_column(String(32), default="admin")
+    note_text: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+    participant_profile: Mapped[ParticipantProfile] = relationship(back_populates="notes")
+
+
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 

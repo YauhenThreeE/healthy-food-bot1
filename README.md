@@ -15,6 +15,7 @@ Telegram bot for healthy meal ordering, nutrition tracking, and lifestyle suppor
 
 /start – старт
 /onboarding – настройка профиля
+/survey – короткий опрос по питанию
 /menu – меню
 /order – оформить заказ для клиента
 /tip – ИИ-совет по питанию

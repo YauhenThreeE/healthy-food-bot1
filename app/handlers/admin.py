@@ -1,28 +1,31 @@
 from __future__ import annotations
 
-import os
 from datetime import date, timedelta
+from pathlib import Path
 
 from aiogram import Router
 from aiogram.filters import Command, CommandObject
-from aiogram.types import Message
+from aiogram.types import FSInputFile, Message
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.db.models import Conversation, DailySummary, MealLog, Product, User
+from app.config import get_admin_id
+from app.db.models import Conversation, DailySummary, MealLog, ParticipantProfile, Product, Questionnaire, User
+from app.services.participant_profiles import (
+    add_participant_note,
+    backfill_participant_profiles,
+    export_participants_csv,
+    get_participant_card_text,
+    get_participant_notes_text,
+    sync_participant_profile_by_questionnaire_id,
+)
 
 router = Router()
 
 
 def _admin_id() -> int | None:
-    raw = (os.getenv("ADMIN_TELEGRAM_ID") or "").strip()
-    if not raw:
-        return None
-    try:
-        return int(raw)
-    except ValueError:
-        return None
+    return get_admin_id()
 
 
 def _is_admin(message: Message) -> bool:
@@ -94,7 +97,13 @@ async def cmd_admin_report(message: Message, session: AsyncSession):
         "Команды:\n"
         "/admin_users\n"
         "/admin_user <telegram_id>\n"
-        "/admin_food <telegram_id> [days]"
+        "/admin_food <telegram_id> [days]\n"
+        "/admin_questionnaires\n"
+        "/admin_participant <telegram_id>\n"
+        "/admin_note <telegram_id> <текст>\n"
+        "/admin_notes <telegram_id>\n"
+        "/admin_sync_profiles\n"
+        "/admin_export_participants"
     )
 
 
@@ -273,3 +282,128 @@ async def cmd_admin_food(message: Message, command: CommandObject, session: Asyn
             f"{row.grams:.0f} г, {row.calories:.0f} ккал, source={row.source}"
         )
     await message.answer("\n".join(lines))
+
+
+@router.message(Command("admin_questionnaires"))
+async def cmd_admin_questionnaires(message: Message, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    result = await session.execute(
+        select(Questionnaire)
+        .order_by(Questionnaire.created_at.desc(), Questionnaire.id.desc())
+        .limit(20)
+    )
+    questionnaires = list(result.scalars())
+    if not questionnaires:
+        await message.answer("Анкет пока нет.")
+        return
+
+    lines = ["Последние анкеты:"]
+    for questionnaire in questionnaires:
+        profile_exists = await session.scalar(
+            select(func.count())
+            .select_from(ParticipantProfile)
+            .where(ParticipantProfile.telegram_user_id == questionnaire.telegram_user_id)
+        )
+        username = f"@{questionnaire.username}" if questionnaire.username else "без username"
+        lines.append(
+            f"• id={questionnaire.id}, tg={questionnaire.telegram_user_id}, {username}\n"
+            f"  статус: {questionnaire.status}, шаг: {questionnaire.current_question_index}, "
+            f"профиль: {'да' if profile_exists else 'нет'}, создана: {_fmt_dt(questionnaire.created_at)}"
+        )
+    await message.answer("\n".join(lines))
+
+
+@router.message(Command("admin_participant"))
+async def cmd_admin_participant(message: Message, command: CommandObject, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    raw_id = (command.args or "").strip()
+    if not raw_id.isdigit():
+        await message.answer("Формат: /admin_participant <telegram_id>")
+        return
+
+    reference_id = int(raw_id)
+    card = await get_participant_card_text(session, reference_id)
+    if "Карточка участника не найдена" in card:
+        questionnaire = await session.get(Questionnaire, reference_id)
+        if questionnaire is not None:
+            await sync_participant_profile_by_questionnaire_id(session, questionnaire.id)
+            card = await get_participant_card_text(session, questionnaire.telegram_user_id)
+    await message.answer(card[:4000])
+
+
+@router.message(Command("admin_note"))
+async def cmd_admin_note(message: Message, command: CommandObject, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    args = (command.args or "").strip()
+    if not args:
+        await message.answer("Формат: /admin_note <telegram_id> <текст>")
+        return
+
+    telegram_id_text, _, note_text = args.partition(" ")
+    if not telegram_id_text.isdigit() or not note_text.strip():
+        await message.answer("Формат: /admin_note <telegram_id> <текст>")
+        return
+
+    note = await add_participant_note(
+        session,
+        telegram_user_id=int(telegram_id_text),
+        note_text=note_text,
+        author_telegram_id=message.from_user.id if message.from_user else None,
+    )
+    if note is None:
+        await message.answer("Не удалось добавить заметку. Сначала нужна завершённая анкета участника.")
+        return
+
+    await message.answer("Заметка сохранена.")
+
+
+@router.message(Command("admin_notes"))
+async def cmd_admin_notes(message: Message, command: CommandObject, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    raw_id = (command.args or "").strip()
+    if not raw_id.isdigit():
+        await message.answer("Формат: /admin_notes <telegram_id>")
+        return
+
+    text = await get_participant_notes_text(session, int(raw_id))
+    await message.answer(text[:4000])
+
+
+@router.message(Command("admin_export_participants"))
+async def cmd_admin_export_participants(message: Message, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    path = await export_participants_csv(session)
+    if path is None:
+        synced = await backfill_participant_profiles(session)
+        path = await export_participants_csv(session)
+        if path is None:
+            await message.answer("Экспорт пустой: нет карточек участников.")
+            return
+        await message.answer(f"Карточки пересобраны из завершённых анкет: {synced}.")
+
+    try:
+        await message.answer_document(FSInputFile(path, filename="participants_export.csv"))
+    finally:
+        try:
+            Path(path).unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+@router.message(Command("admin_sync_profiles"))
+async def cmd_admin_sync_profiles(message: Message, session: AsyncSession):
+    if await _reject_non_admin(message):
+        return
+
+    synced = await backfill_participant_profiles(session)
+    await message.answer(f"Карточки участников пересобраны: {synced}")

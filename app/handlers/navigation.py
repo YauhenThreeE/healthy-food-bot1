@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.states.onboarding import OnboardingStates
 from app.states.orders import OrderStates
 from app.keyboards.onboarding import goal_keyboard
+from app.handlers.survey import start_survey_from_callback
 
 router = Router()
 
@@ -80,3 +81,8 @@ async def go_today(callback: CallbackQuery):
         parse_mode="HTML",
     )
     await callback.answer()
+
+
+@router.callback_query(F.data == "go:survey")
+async def go_survey(callback: CallbackQuery, state: FSMContext):
+    await start_survey_from_callback(callback, state)

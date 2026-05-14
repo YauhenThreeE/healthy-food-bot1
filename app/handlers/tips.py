@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.models import User
-from app.services.ai_memory import remember_fact
+from app.services.ai_memory import load_memory_context, remember_fact
 from app.services.ai_tips import generate_tip
 from app.services.conversation_log import log_conversation_message
 from app.services.user_profile import ensure_telegram_user
@@ -65,8 +65,9 @@ async def cmd_tip(message: Message, command: CommandObject, session: AsyncSessio
                 importance=0.7,
             )
 
+        memory_context = await load_memory_context(session, user.id, limit=8)
         async with ChatActionSender.typing(bot=message.bot, chat_id=message.chat.id):
-            text = await generate_tip(profile, q)
+            text = await generate_tip(profile, q, memory_context=memory_context)
         await log_conversation_message(session, user.id, "user", q or "/tip", intent="tip")
         for chunk in _split_for_telegram(text):
             await message.answer(chunk)

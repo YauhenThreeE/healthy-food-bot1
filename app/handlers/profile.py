@@ -59,6 +59,10 @@ def _profile_keyboard(has_profile: bool) -> InlineKeyboardMarkup:
         callback_data="go:menu",
     )])
     rows.append([InlineKeyboardButton(
+        text="🧭 Опрос питания",
+        callback_data="go:survey",
+    )])
+    rows.append([InlineKeyboardButton(
         text="🛒 Оформить заказ",
         callback_data="go:order",
     )])

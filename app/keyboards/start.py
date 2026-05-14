@@ -35,4 +35,8 @@ def after_start_keyboard(show_profile: bool = True) -> InlineKeyboardMarkup:
         text="📊 Итог за сегодня",
         callback_data="go:today",
     )])
+    rows.append([InlineKeyboardButton(
+        text="🧭 Опрос питания",
+        callback_data="go:survey",
+    )])
     return InlineKeyboardMarkup(inline_keyboard=rows)

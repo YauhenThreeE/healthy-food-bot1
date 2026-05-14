@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Optional, Tuple
+from typing import Any, Optional, Tuple
 
 from openai import (
     APIConnectionError,
@@ -26,6 +26,18 @@ SYSTEM_PROMPT = """Ты дружелюбный нутрициолог-ассис
 Отвечай по-русски, кратко и по делу (до ~1200 символов), без диагнозов и без назначения лечения.
 Учитывай аллергии и ограничения пользователя; если чего-то не хватает — мягко уточни в конце одним предложением.
 Не выдумывай медицинские факты; давай общие рекомендации по питанию и бытовые идеи блюд."""
+
+
+def _format_memory_context(memory_context: list[dict[str, Any]] | None) -> str:
+    if not memory_context:
+        return "Дополнительных фактов нет."
+    lines: list[str] = []
+    for item in memory_context[:10]:
+        memory_type = item.get("type") or "fact"
+        key = item.get("key") or "-"
+        value = item.get("value") or "-"
+        lines.append(f"- {memory_type}:{key}: {value}")
+    return "\n".join(lines)
 
 
 def _provider_label(base_url: str) -> str:
@@ -64,7 +76,11 @@ def _llm_client_and_model() -> Tuple[Optional[AsyncOpenAI], Optional[str], str]:
     return None, None, ""
 
 
-async def generate_tip(profile: Optional[UserProfile], user_question: Optional[str]) -> str:
+async def generate_tip(
+    profile: Optional[UserProfile],
+    user_question: Optional[str],
+    memory_context: list[dict[str, Any]] | None = None,
+) -> str:
     client, model, provider = _llm_client_and_model()
     if not client or not model:
         return (
@@ -76,6 +92,7 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
         )
 
     ctx = format_profile_for_prompt(profile)
+    memory = _format_memory_context(memory_context)
     user_msg = user_question.strip() if user_question else "Дай одну полезную рекомендацию на сегодня по питанию."
 
     try:
@@ -85,7 +102,11 @@ async def generate_tip(profile: Optional[UserProfile], user_question: Optional[s
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {
                     "role": "user",
-                    "content": f"Контекст профиля:\n{ctx}\n\nЗапрос пользователя:\n{user_msg}",
+                    "content": (
+                        f"Контекст профиля:\n{ctx}\n\n"
+                        f"Дополнительная память и ответы опросов:\n{memory}\n\n"
+                        f"Запрос пользователя:\n{user_msg}"
+                    ),
                 },
             ],
             temperature=0.7,
