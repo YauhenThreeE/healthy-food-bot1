@@ -23,4 +23,5 @@ Main goals:
 
 ```bash
 source .venv/bin/activate
-python bot.py       йй
+python bot.py
+```
